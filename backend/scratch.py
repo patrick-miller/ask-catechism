@@ -106,7 +106,7 @@ def main():
             logging.error(f"An error occurred while fetching data: {e}")
             return
 
-    print(text_data[0])
+    logging.info(text_data[0])
 
 if __name__ == "__main__":
     main()
