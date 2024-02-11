@@ -1,3 +1,5 @@
 __pycache__
 storage
 .env
+poetry.lock
+text_data.pkl
