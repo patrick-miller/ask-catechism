@@ -24,11 +24,13 @@ logging.basicConfig(level=logging.INFO)
 
 def extract_items(ul_element, depth):
     items = []
+    other_ul = ul_element.find('ul', recursive=False)
     list_items = ul_element.find_all('li', recursive=False)
     
-    if not list_items:
-        depth += 1
-        list_items = ul_element.find('ul', recursive=False).find_all('li', recursive=False)
+    if other_ul:
+        logging.info(f'Another list found within the UL: {depth}')
+        item = {'name': '', 'link': '', 'text': '', Config.KEY_MAP[depth + 1]: extract_items(other_ul, depth + 1)}
+        items.append(item)
 
     for li in list_items:
         item = process_list_item(li, depth)
@@ -39,9 +41,12 @@ def extract_items(ul_element, depth):
 def process_list_item(li, depth):
     if depth >= Config.MAX_DEPTH:
         return None
-    
+        
     header = li.contents[0]
     title = header.get_text(strip=True)
+
+    logging.info(f"Started extracting data for: {title}")
+
     link = header.find('a').get('href') if header.find('a') else None
     text = extract_text_from_url(urljoin(Config.BASE_URL, link)) if link else None
     item = {'name': title, 'link': link, 'text': text}
@@ -169,7 +174,7 @@ if __name__ == "__main__":
     nodes = []
     # TODO: should we be creating a node if there is no text?
 
-    summarization_level = 'article'  # Can be 'section', 'chapter', 'article' or 'paragraph'
+    summarization_level = 'paragraph'  # Can be 'section', 'chapter', 'article' or 'paragraph'
 
     for part in text_data:
         part_node = create_node(part['name'], part['link'], part['text'], 'part')
@@ -182,17 +187,54 @@ if __name__ == "__main__":
         if i > 0:
             nodes[i].relationships[NodeRelationship.PREVIOUS] = RelatedNodeInfo(node_id=nodes[i-1].node_id)
 
+    ##### RECOMMENDATION: Go with the paragraph level chunking and an 8k context window. Need massaging of the max token chunk.
+
+    ### Debugging strategies around chunking
+    character_lengths = []
     for n in nodes:
         print(n.get_metadata_str())
         print(len(n.text))
+        character_lengths += [len(n.text)]
         pass
-    # print(nodes[-1].text)
-    # print(text_data[-2])
+    print('Summary Statistics')
+    print(f'Total characters: {sum(character_lengths)}')
+    print(f'Number of nodes: {len(nodes)}')
+    print(f'Average characters per node: {sum(character_lengths) / len(nodes)}')
+    print(f'Max characters per node: {max(character_lengths)}')
+    
+    # For the most granular (paragraphs), the max characters is 33k and the average is 3k.
+    # That gives us ~8k tokens for the max (need to verify)
+    # For the next level up (articles), the max characters is 110k and the average is 11k
+    # That gives us ~28k tokens for the max (need to verify)
+    # For the next level up (chapters), the max characters is 182k and the average is 31k
+    # That gives us ~46k tokens for the max (need to verify)
 
-    print(text_data[-1]['sections'][-1]['chapters'][-1])
 
-    # print(part)
-    # print(nodes[0].node_id)
-    # print(nodes[0].relationships)
-    # print(nodes[1].node_id)
-    # print(nodes[1].text)
+    ### Print all of the numbers in the text
+    ### Turn this into a test
+    # import re
+    # all_numbers = []
+    # for n in nodes:
+    #     t = n.text
+    #     integer_numbers = re.findall(r'\b\d+\b', t)
+
+    #     # Convert the extracted strings to integers
+    #     integer_numbers = [int(number) for number in integer_numbers]
+    #     all_numbers += integer_numbers
+    
+    # missing_numbers = [number for number in range(1, 2866) if number not in all_numbers]
+    # print(missing_numbers)
+    # This should be empty
+
+
+    # ### This checks the structure of the table of contents
+    # for part in text_data:
+    #     print(part['name'])
+    #     for section in part['sections']:
+    #         print(section['name'])
+    #         for chapter in section['chapters']:
+    #             print(chapter['name'])
+    #             for article in chapter.get('articles', []):
+    #                 print(article['name'])
+    #                 for paragraph in article.get('paragraphs', []):
+    #                     print(paragraph['name'])
