@@ -5,6 +5,8 @@ from urllib.parse import urljoin
 import logging
 import time
 import pickle
+from llama_index import VectorStoreIndex
+from llama_index.schema import TextNode, NodeRelationship, RelatedNodeInfo
 
 class Config:
     BASE_URL = "https://www.vatican.va/archive/ENG0015/"
@@ -17,10 +19,15 @@ class Config:
         'chapter': 'articles',
         'article': 'paragraphs'
     }
-    SCRAPED_DATA_FILE = './text_data.pkl'
+    SCRAPED_DATA_FILE = './data/text_data.pkl'
+    NODES_FILE = './data/nodes.pkl'
+    STORAGE_DIR = './storage'
+    # Can be 'section', 'chapter', 'article' or 'paragraph'
+    SUMMARIZATION_LEVEL = 'paragraph'
 
 # Initialize logging
 logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger()
 
 def extract_items(ul_element, depth):
     items = []
@@ -28,7 +35,7 @@ def extract_items(ul_element, depth):
     list_items = ul_element.find_all('li', recursive=False)
     
     if other_ul:
-        logging.info(f'Another list found within the UL: {depth}')
+        logger.info(f'Another list found within the UL: {depth}')
         item = {'name': '', 'link': '', 'text': '', Config.KEY_MAP[depth + 1]: extract_items(other_ul, depth + 1)}
         items.append(item)
 
@@ -45,7 +52,7 @@ def process_list_item(li, depth):
     header = li.contents[0]
     title = header.get_text(strip=True)
 
-    logging.info(f"Started extracting data for: {title}")
+    logger.info(f"Started extracting data for: {title}")
 
     link = header.find('a').get('href') if header.find('a') else None
     text = extract_text_from_url(urljoin(Config.BASE_URL, link)) if link else None
@@ -54,7 +61,7 @@ def process_list_item(li, depth):
     if next_ul := li.find('ul', recursive=False):
         item[Config.KEY_MAP[depth + 1]] = extract_items(next_ul, depth + 1)
 
-    logging.info(f"Finished extracting data for: {title}")
+    logger.info(f"Finished extracting data for: {title}")
 
     return item
 
@@ -65,7 +72,7 @@ def extract_text_from_url(url):
         response.raise_for_status()
         content = response.content
     except requests.RequestException as e:
-        logging.error(f"Failed to retrieve data from URL: {url} Error: {e}")
+        logger.error(f"Failed to retrieve data from URL: {url} Error: {e}")
         raise
 
     soup = BeautifulSoup(content, 'html.parser')
@@ -82,46 +89,41 @@ def cleanup_paragraph(p):
     return p.get_text(strip=True).replace('\r\n', ' ')
 
 def get_text_from_catechism():
-    logging.info("Extracting text from Catechism site")
+    logger.info("Extracting text from Catechism site")
     toc_url = urljoin(Config.BASE_URL, '_INDEX.HTM')
     try:
         response = requests.get(toc_url)
         response.raise_for_status()
         content = response.content
     except requests.RequestException as e:
-        logging.error(f"Failed to retrieve table of contents: {e}")
+        logger.error(f"Failed to retrieve table of contents: {e}")
         raise
 
     soup = BeautifulSoup(content, 'html.parser')
     top_level_ul = soup.find('ul')
     return extract_items(top_level_ul, 0)
 
-def main():
-    if os.path.exists(Config.SCRAPED_DATA_FILE):
+def load_data_from_file_or_collect(file, function):
+    if os.path.exists(file):
         try:
             # Load from pickle file if it exists
-            with open(Config.SCRAPED_DATA_FILE, 'rb') as f:
-                text_data = pickle.load(f)
-            logging.info("Data loaded from pickle file.")
+            with open(file, 'rb') as f:
+                data = pickle.load(f)
+            logger.info("Data loaded from pickle file.")
         except Exception as e:
-            logging.error(f"Error loading data from pickle file: {e}")
+            logger.error(f"Error loading data from pickle file: {e}")
             return
     else:
         try:
             # Fetch data and save to pickle file
-            text_data = get_text_from_catechism()
+            data = function()
             with open(Config.SCRAPED_DATA_FILE, 'wb') as f:
-                pickle.dump(text_data, f)
-            logging.info("Data fetched and saved to pickle file.")
+                pickle.dump(data, f)
+            logger.info("Data fetched and saved to pickle file.")
         except Exception as e:
-            logging.error(f"An error occurred while fetching data: {e}")
+            logger.error(f"An error occurred while fetching data: {e}")
             return
-
-    return text_data
-
-
-from llama_index.schema import TextNode, NodeRelationship, RelatedNodeInfo
-
+    return data
 
 def create_node(name, link, text, level):
     return TextNode(text='' if text is None else text, 
@@ -169,13 +171,8 @@ def process_nodes(items, parent_node, level, summarization_level):
                 nodes += process_nodes(item[child_level_key], item_node, child_level, summarization_level)
     return nodes
 
-if __name__ == "__main__":
-    text_data = main()
+def create_node_stucture(text_data, summarization_level):
     nodes = []
-    # TODO: should we be creating a node if there is no text?
-
-    summarization_level = 'paragraph'  # Can be 'section', 'chapter', 'article' or 'paragraph'
-
     for part in text_data:
         part_node = create_node(part['name'], part['link'], part['text'], 'part')
         nodes.append(part_node)
@@ -187,20 +184,43 @@ if __name__ == "__main__":
         if i > 0:
             nodes[i].relationships[NodeRelationship.PREVIOUS] = RelatedNodeInfo(node_id=nodes[i-1].node_id)
 
+    return nodes
+
+if __name__ == "__main__":
+    logger.info("Creating new index")
+    
+    text_data = load_data_from_file_or_collect(Config.SCRAPED_DATA_FILE, get_text_from_catechism)
+
+    nodes = create_node_stucture(text_data, Config.SUMMARIZATION_LEVEL)
+
+    # index = VectorStoreIndex(nodes)
+    # index.storage_context.persist(Config.STORAGE_DIR)
+    
+    # logger.info(f"Finished creating new index. Stored in {Config.STORAGE_DIR}")
+    
+    
+
+
+
+    ### TODO: save down the nodes for retrieval
+
+
+
+
     ##### RECOMMENDATION: Go with the paragraph level chunking and an 8k context window. Need massaging of the max token chunk.
 
     ### Debugging strategies around chunking
-    character_lengths = []
-    for n in nodes:
-        print(n.get_metadata_str())
-        print(len(n.text))
-        character_lengths += [len(n.text)]
-        pass
-    print('Summary Statistics')
-    print(f'Total characters: {sum(character_lengths)}')
-    print(f'Number of nodes: {len(nodes)}')
-    print(f'Average characters per node: {sum(character_lengths) / len(nodes)}')
-    print(f'Max characters per node: {max(character_lengths)}')
+    # character_lengths = []
+    # for n in nodes:
+    #     print(n.get_metadata_str())
+    #     print(len(n.text))
+    #     character_lengths += [len(n.text)]
+    #     pass
+    # print('Summary Statistics')
+    # print(f'Total characters: {sum(character_lengths)}')
+    # print(f'Number of nodes: {len(nodes)}')
+    # print(f'Average characters per node: {sum(character_lengths) / len(nodes)}')
+    # print(f'Max characters per node: {max(character_lengths)}')
     
     # For the most granular (paragraphs), the max characters is 33k and the average is 3k.
     # That gives us ~8k tokens for the max (need to verify)
