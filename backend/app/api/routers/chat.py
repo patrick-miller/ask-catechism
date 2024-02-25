@@ -1,12 +1,12 @@
 from typing import List
 
 from fastapi.responses import StreamingResponse
-from llama_index.chat_engine.types import BaseChatEngine
+from llama_index.core.query_engine import BaseQueryEngine
 
-from app.engine.index import get_chat_engine
+from app.engine.engine import get_query_engine
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from llama_index.llms.base import ChatMessage
-from llama_index.llms.types import MessageRole
+from llama_index.core.llms import ChatMessage
+from llama_index.core.llms import MessageRole
 from pydantic import BaseModel
 
 chat_router = r = APIRouter()
@@ -25,7 +25,7 @@ class _ChatData(BaseModel):
 async def chat(
     request: Request,
     data: _ChatData,
-    chat_engine: BaseChatEngine = Depends(get_chat_engine),
+    query_engine: BaseQueryEngine = Depends(get_query_engine),
 ):
     # check preconditions and get last message
     if len(data.messages) == 0:
@@ -49,14 +49,6 @@ async def chat(
     ]
 
     # query chat engine
-    response = await chat_engine.astream_chat(lastMessage.content, messages)
+    response = await query_engine.aquery(lastMessage.content) # , messages)
 
-    # stream response
-    async def event_generator():
-        async for token in response.async_response_gen():
-            # If client closes connection, stop sending events
-            if await request.is_disconnected():
-                break
-            yield token
-
-    return StreamingResponse(event_generator(), media_type="text/plain")
+    return response.response
