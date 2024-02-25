@@ -1,4 +1,4 @@
-from llama_index import ServiceContext
+from llama_index.core import ServiceContext
 
 from app.context import create_base_context
 from app.engine.constants import CHUNK_SIZE, CHUNK_OVERLAP

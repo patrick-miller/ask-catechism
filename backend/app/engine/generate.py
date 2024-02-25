@@ -8,8 +8,8 @@ from bs4 import BeautifulSoup
 from urllib.parse import urljoin
 import time
 import pickle
-from llama_index import VectorStoreIndex
-from llama_index.schema import TextNode, NodeRelationship, RelatedNodeInfo
+from llama_index.core import VectorStoreIndex
+from llama_index.core.schema import TextNode, NodeRelationship, RelatedNodeInfo
 
 load_dotenv()
 

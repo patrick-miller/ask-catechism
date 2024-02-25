@@ -47,10 +47,27 @@ The API allows CORS for all origins to simplify development. You can change this
 ENVIRONMENT=prod uvicorn main:app
 ```
 
-## Learn More
+## Chat 🦙
+The script at `scripts/chat_llama.py` spins up a repl interface to start a chat within your terminal by interacting with the API directly. This is useful for debugging issues without having to interact with a full frontend.
 
-To learn more about LlamaIndex, take a look at the following resources:
+The script takes an optional `--base_url` argument that defaults to `http://localhost:8000` but can be specified to make the script point to the prod or preview servers. The `Makefile` contains `chat` & `chat_prod` commands that specify this arg for you.
 
-- [LlamaIndex Documentation](https://docs.llamaindex.ai) - learn about LlamaIndex.
+Usage is as follows:
 
-You can check out [the LlamaIndex GitHub repository](https://github.com/run-llama/llama_index) - your feedback and contributions are welcome!
+```
+$ poetry shell  # if you aren't already in your poetry shell
+$ make chat
+poetry run python -m scripts.chat_llama
+(Chat🦙) message Hi
+
+
+=== Message 0 ===
+{'id': '05db08be-bbd5-4908-bd68-664d041806f6', 'created_at': None, 'updated_at': None, 'conversation_id': '8371bbc8-a7fd-4b1f-889b-d0bc882df2a5', 'content': 'Hello! How can I assist you today?', 'role': 'assistant', 'status': 'PENDING', 'sub_processes': [{'id': None, 'created_at': None, 'updated_at': None, 'message_id': '05db08be-bbd5-4908-bd68-664d041806f6', 'content': 'Starting to process user message', 'source': 'constructed_query_engine'}]}
+
+
+=== Message 1 ===
+{'id': '05db08be-bbd5-4908-bd68-664d041806f6', 'created_at': '2023-06-29T20:50:36.659499', 'updated_at': '2023-06-29T20:50:36.659499', 'conversation_id': '8371bbc8-a7fd-4b1f-889b-d0bc882df2a5', 'content': 'Hello! How can I assist you today?', 'role': 'assistant', 'status': 'SUCCESS', 'sub_processes': [{'id': '75ace83c-1ebd-4756-898f-1957a69eeb7e', 'created_at': '2023-06-29T20:50:36.659499', 'updated_at': '2023-06-29T20:50:36.659499', 'message_id': '05db08be-bbd5-4908-bd68-664d041806f6', 'content': 'Starting to process user message', 'source': 'constructed_query_engine'}]}
+
+
+====== Final Message ======
+Hello! How can I assist you today?
